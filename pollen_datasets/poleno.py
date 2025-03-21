@@ -9,7 +9,7 @@ from typing import Optional
 
 class BaseHolographyImageFolder(torch.utils.data.Dataset):
     
-    def __init__(self, root, transform=None, labels: Optional[str]=None, config: Optional[str]=None, conditioning=None, verbose: bool=False):
+    def __init__(self, root, transform=None, labels: Optional[str]=None, config=None, conditioning=None, verbose: bool=False):
         self.root = root
         self.transform = transform
         self.config = config
@@ -78,11 +78,13 @@ class HolographyImageFolder(BaseHolographyImageFolder):
                 for filename in filenames:
                     if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                         img_path = os.path.join(dirpath, filename)
+                        relative_path = os.path.relpath(img_path, self.root)
                         folder_name = os.path.basename(os.path.dirname(img_path))
                         if folder_name not in foldername_to_id.keys():
                             foldername_to_id[folder_name] = index
                             index += 1
-                        self.samples.append((img_path, foldername_to_id[folder_name], filename))
+                        # self.samples.append((relative_path, filename, foldername_to_id[folder_name]))
+                        self.samples.append((relative_path, filename))
 
             # Save the searched samples as pickle file
             if self.labels is not None and self.labels.lower().endswith((".pickle", ".pkl")):
@@ -93,20 +95,28 @@ class HolographyImageFolder(BaseHolographyImageFolder):
             # Save the searched samples as csv file
             if self.labels is not None and self.labels.lower().endswith(".csv"):
                 Path(os.path.dirname(os.path.split(self.labels)[-1])).mkdir(parents=True, exist_ok=True)
-                pd.DataFrame(self.samples).to_csv(self.labels, index=False, header=False)
+                pd.DataFrame(self.samples).to_csv(self.labels, index=False, header=["img_path", "filename"])
         
 
     def load_annotations_from_csv(self):
         df = pd.read_csv(self.labels)
-        class_cond_colunmn = self.config.get("classes", None)
-        feature_columns = self.config.get("features", None)
-        cond_image_colunmn = self.config.get("cond_img_path", None)
-        filename_column = self.config["filenames"]
-        image_folder = self.config["img_path"]
 
-        filenames = [filename for filename in list(df[filename_column])]
-        img_paths = [os.path.join(image_folder, filename) for filename in filenames]
-        self.samples = list(zip(img_paths, filenames))
+        if self.config is not None:
+            # Get abbreviation from config if they exists
+            filename_column = self.config.get("filenames", "filename")
+            image_folder = self.config.get("img_path", "img_path")
+            class_cond_colunmn = self.config.get("classes", None) 
+            feature_columns = self.config.get("features", None)
+            cond_image_colunmn = self.config.get("cond_img_path", None)
+        else:
+            # Default names
+            filename_column = "filename"
+            image_folder = "img_path"
+            class_cond_colunmn = None
+            feature_columns = None
+            cond_image_colunmn = None
+
+        self.samples = list(zip(df[image_folder], df[filename_column]))
 
         # class features for conditioning
         if class_cond_colunmn is not None:
@@ -137,7 +147,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
         # get image
         img_path, filename = self.samples[idx]
-        img = Image.open(img_path)
+        img = Image.open(os.path.join(self.root, img_path))
 
         if img.mode == 'I':
             img = img.convert('I;16') 
@@ -147,7 +157,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
             img = np.array(img).astype('uint8')
 
         if self.transform:
-            img = self.transform(img)   
+            img = self.transform(img)
 
         # get conditioning
         condition = dict()
