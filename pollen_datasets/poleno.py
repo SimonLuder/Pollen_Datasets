@@ -159,7 +159,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
         if self.transform:
             img = self.transform(img)
 
-        # get conditioning
+        # Conditioning
         condition = dict()
 
         if self.class_labels:
@@ -169,19 +169,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
             tab_cond = self.tabular_features[idx]
             condition["tabular"] = torch.tensor(tab_cond)
 
-        if self.cond_imgs:
-            # cond_img_path = self.cond_imgs[idx]
-
-            # # temporarly
-            # cond_img = Image.open(cond_img_path)
-
-            # if cond_img.mode == 'I':
-            #     cond_img = cond_img.convert('I;16')
-                
-            # cond_img = (np.array(cond_img) / 256).astype('uint8')
-
-            # # TODO Open image as tensor and preprocess
- 
+        if self.cond_imgs: 
             condition["image"] = img
 
         return img, condition, filename
@@ -194,14 +182,23 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
 
     def load_annotations_from_csv(self):
-        
         df = pd.read_csv(self.labels)
-        class_cond_colunmn = self.config.get("classes", None)
-        feature_columns = self.config.get("features", None)
-        cond_image_colunmn = self.config.get("cond_img_path", None)
-        filename_column = self.config["filenames"]
-        image_folder = self.config["img_path"]
-        event_id_column = "event_id"
+        
+        if self.config is not None:
+            filename_column = self.config.get("filenames", "filename")
+            image_folder = self.config.get("img_path", "img_path")
+            class_cond_colunmn = self.config.get("classes", None) 
+            feature_columns = self.config.get("features", None)
+            cond_image_colunmn = self.config.get("cond_img_path", None)
+            event_id_column = "event_id"
+        else:
+            # Default names
+            filename_column = "filename"
+            image_folder = "img_path"
+            class_cond_colunmn = None
+            feature_columns = None
+            cond_image_colunmn = None
+            event_id_column = "event_id"
 
         # Group by event_id
         grouped = df.groupby(event_id_column)
@@ -240,7 +237,7 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
             if self.transform:
                 imgs[i] = self.transform(img)   
 
-        # get conditioning
+        # Conditioning
         condition = dict()
 
         if self.class_labels:
