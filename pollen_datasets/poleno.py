@@ -59,12 +59,12 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
     def _load_image(self, img_path):
         img = Image.open(os.path.join(self.root, img_path))
         
-        if img.mode == 'I':
-            img = img.convert('I;16')
-            img = (np.array(img) / 256).astype('uint8')
-    
+        if img.mode == 'I;16' or img.mode == 'I':
+            # Convert to NumPy and scale from [0, 65535] to [0, 1]
+            img = np.array(img).astype(np.float32) / 65535.0
         elif img.mode == 'L':
-            img = np.array(img).astype('uint8')
+            # 8-bit grayscale, scale from [0, 255] to [0, 1]
+            img = np.array(img).astype(np.float32) / 255.0
 
         if self.transform:
             img = self.transform(img)
