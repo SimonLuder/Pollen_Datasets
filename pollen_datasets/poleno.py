@@ -54,6 +54,22 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.samples)
+    
+
+    def _load_image(self, img_path):
+        img = Image.open(os.path.join(self.root, img_path))
+        
+        if img.mode == 'I':
+            img = img.convert('I;16')
+            img = (np.array(img) / 256).astype('uint8')
+    
+        elif img.mode == 'L':
+            img = np.array(img).astype('uint8')
+
+        if self.transform:
+            img = self.transform(img)
+
+        return img
 
 
 class HolographyImageFolder(BaseHolographyImageFolder):
@@ -147,17 +163,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
         # get image
         img_path, filename = self.samples[idx]
-        img = Image.open(os.path.join(self.root, img_path))
-
-        if img.mode == 'I':
-            img = img.convert('I;16') 
-            img = (np.array(img) / 256).astype('uint8')
-
-        elif img.mode == 'L':
-            img = np.array(img).astype('uint8')
-
-        if self.transform:
-            img = self.transform(img)
+        img = self._load_image(img_path)
 
         # Conditioning
         condition = dict()
@@ -187,68 +193,90 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
         if self.config is not None:
             filename_column = self.config.get("filenames", "filename")
             image_folder = self.config.get("img_path", "img_path")
-            class_cond_colunmn = self.config.get("classes", None) 
+            class_cond_column = self.config.get("classes", None) 
             feature_columns = self.config.get("features", None)
-            cond_image_colunmn = self.config.get("cond_img_path", None)
-            event_id_column = "event_id"
+            cond_image_column = self.config.get("cond_img_path", None)
+            event_id_column = self.config.get("event_id", "event_id")
         else:
             # Default names
             filename_column = "filename"
             image_folder = "img_path"
-            class_cond_colunmn = None
+            class_cond_column = None
             feature_columns = None
-            cond_image_colunmn = None
+            cond_image_column = None
             event_id_column = "event_id"
 
-        # Group by event_id
-        grouped = df.groupby(event_id_column)
         self.samples = []
         self.class_labels = []
         self.tabular_features = []
         self.cond_imgs = []
 
+        grouped = df.groupby(event_id_column)
+
         for event_id, group in grouped:
             if len(group) != 2:
                 raise ValueError(f"Event ID {event_id} does not have exactly two rows.")
             
-            filenames = group[filename_column].tolist()
-            img_paths = [os.path.join(image_folder, filename) for filename in filenames]
-            self.samples.append((img_paths, filenames))
+            group = group.reset_index(drop=True)
+            sample1 = (group.loc[0, image_folder], group.loc[0, filename_column])
+            sample2 = (group.loc[1, image_folder], group.loc[1, filename_column])
+            self.samples.append((sample1, sample2))
 
-            if class_cond_colunmn is not None:
-                self.class_labels.append(group[class_cond_colunmn].tolist())
+            if class_cond_column is not None:
+                self.class_labels.append((
+                    group.loc[0, class_cond_column],
+                    group.loc[1, class_cond_column]
+                ))
+
             if feature_columns is not None:
-                self.tabular_features.append(group[feature_columns].values.tolist())
-            if cond_image_colunmn is not None:
-                self.cond_imgs.append(group[cond_image_colunmn].tolist())
+                self.tabular_features.append((
+                    group.loc[0, feature_columns].tolist(),
+                    group.loc[1, feature_columns].tolist()
+                ))
+
+            if cond_image_column is not None:
+                self.cond_imgs.append((
+                    group.loc[0, cond_image_column],
+                    group.loc[1, cond_image_column]
+                ))
+
+        # If not provided, set to None
+        if class_cond_column is None:
+            self.class_labels = None
+        if feature_columns is None:
+            self.tabular_features = None
+        if cond_image_column is None:
+            self.cond_imgs = None
 
 
     def __getitem__(self, idx):
-        img_paths, filenames = self.samples[idx]
-        imgs = [Image.open(img_path) for img_path in img_paths]
+        # Unpack paired samples
+        (img_path1, filename1), (img_path2, filename2) = self.samples[idx]
 
-        for i, img in enumerate(imgs):
-            if img.mode == 'I':
-                img = img.convert('I;16') 
-                img = (np.array(img) / 256).astype('uint8')
-            elif img.mode == 'L':
-                img = np.array(img).astype('uint8')
+        img1 = self._load_image(img_path1)
+        img2 = self._load_image(img_path2)
 
-            if self.transform:
-                imgs[i] = self.transform(img)   
-
-        # Conditioning
+        # Conditioning dictionary
         condition = dict()
 
         if self.class_labels:
-            condition["class"] = self.class_labels[idx]
+            condition["class"] = self.class_labels[idx]  # Tuple: (label1, label2)
 
         if self.tabular_features:
-            tab_cond = self.tabular_features[idx]
-            condition["tabular"] = torch.tensor(tab_cond)
+            tab1, tab2 = self.tabular_features[idx]
+            condition["tabular"] = (
+                torch.tensor(tab1, dtype=torch.float32),
+                torch.tensor(tab2, dtype=torch.float32)
+            )
 
         if self.cond_imgs:
-            condition["image"] = imgs
+            cond1, cond2 = self.cond_imgs[idx]
+            # Assuming conditioning images need to be loaded similarly to input images
+            cond_img1 = Image.open(os.path.join(self.root, cond1))
+            cond_img2 = Image.open(os.path.join(self.root, cond2))
+            if self.transform:
+                cond_img1 = self.transform(cond_img1)
+                cond_img2 = self.transform(cond_img2)
+            condition["image"] = (cond_img1, cond_img2)
 
-        return imgs, condition, filenames
-
+        return (img1, img2), condition, (filename1, filename2)
