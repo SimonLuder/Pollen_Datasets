@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pollen_datasets"
-version = "0.0.0"
+version = "0.0.1"
 description = "Dataset classes for SwissPoleno dataset in PyTorch"
 readme = "README.md"
 license = { text = "MIT" }
