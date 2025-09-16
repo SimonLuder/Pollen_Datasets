@@ -284,6 +284,9 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
     
 
 class DataSetup:
+    """
+    Class to setup datasets by searching images in folders and downloading tables from a sqlite database.
+    """
 
     def __init__(self):
         self.foldername_to_id = dict()
@@ -344,3 +347,29 @@ class DataSetup:
                 df.to_csv(os.path.join(csv_dir, f"{table['name']}.csv"), index=False)
                 pass
         conn.close()
+
+    def preprocess(self, df):
+        df = self.remove_invalid_entries(df)
+        df = self.create_addidional_labels(df)
+        return df
+    
+
+    def create_addidional_labels(self, df):
+        df["filenames"] = df["dataset_id"] + "/" + df["rec_path"]
+        return df
+
+
+    def normalize(self, df):
+        return (df-df.mean())/df.std()
+
+
+    def remove_invalid_entries(self, df):
+        # Remove rows with NaN values
+        df = df.dropna()
+
+        # Keep only event_ids with exactly two entries
+        event_id_count = df["event_id"].value_counts()
+        valid_samples = event_id_count[event_id_count == 2].index
+        df = df.loc[df["event_id"].isin(valid_samples)]
+        return df
+
