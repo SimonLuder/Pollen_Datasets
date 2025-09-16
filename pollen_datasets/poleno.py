@@ -1,6 +1,7 @@
 import os
 import torch
 import pickle
+import sqlite3
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -121,7 +122,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
             # Get abbreviation from config if they exists
             filename_column = self.config.get("filenames", "filename")
             image_folder = self.config.get("img_path", "img_path")
-            class_cond_colunmn = self.config.get("classes", None) 
+            class_cond_colunmn = self.config.get("classes", None)
             feature_columns = self.config.get("features", None)
             cond_image_colunmn = self.config.get("cond_img_path", None)
         else:
@@ -280,3 +281,66 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
             condition["image"] = (cond_img1, cond_img2)
 
         return (img1, img2), condition, (filename1, filename2)
+    
+
+class DataSetup:
+
+    def __init__(self):
+        self.foldername_to_id = dict()
+        self.samples = None
+
+
+    def generate_dataset(self, root, save_as=None):
+        self.search_images_in_folder(root, save_as)
+        if save_as is not None and save_as.lower().endswith((".pickle", ".pkl")):
+            self.save_as_pickle(save_as)
+        if save_as is not None and save_as.lower().endswith(".csv"):
+            self.save_as_csv(save_as)
+
+
+    def search_images_in_folder(self, root):
+        index = 0
+        # Get all images in root and subdirs of root
+        self.samples = []
+        for dirpath, _, filenames in os.walk(root):
+            for filename in filenames:
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    img_path = os.path.join(dirpath, filename)
+                    relative_path = os.path.relpath(img_path, root)
+                    folder_name = os.path.basename(os.path.dirname(img_path))
+
+                    # Update folder to id mapping
+                    if folder_name not in self.foldername_to_id.keys():
+                        self.foldername_to_id[folder_name] = index
+                        index += 1
+
+                    folder_id = self.foldername_to_id[folder_name]
+                    self.samples.append((relative_path, filename, folder_id))
+
+
+    def save_as_pickle(self, save_as):
+        # Save the searched samples as pickle file
+        Path(os.path.dirname(os.path.split(save_as)[-1])).mkdir(parents=True, exist_ok=True)
+        with open(save_as, 'wb') as f:
+            pickle.dump(self.samples, f)
+
+
+    def save_as_csv(self, save_as):
+        # Save the searched samples as csv file
+        Path(os.path.dirname(os.path.split(save_as)[-1])).mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(self.samples).to_csv(save_as, index=False, header=["img_path", "filename", "folder_id"])
+
+
+    def download_tables_from_db(self, db_path, csv_dir):
+        Path(csv_dir).mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(db_path)
+        # Get all tables names
+        all_table_names = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table';", conn)
+        # Download tables
+        for _, table in all_table_names.iterrows():
+            if not os.path.isfile(os.path.join(csv_dir, f"{table['name']}.csv")):
+                print(f"Downloading table: {table['name']}")
+                df = pd.read_sql_query(f"SELECT * FROM {table['name']}", conn)
+                df.to_csv(os.path.join(csv_dir, f"{table['name']}.csv"), index=False)
+                pass
+        conn.close()
