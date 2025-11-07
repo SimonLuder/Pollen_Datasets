@@ -369,8 +369,12 @@ class DataSetup:
 
     def save_as_csv(self, save_as):
         """Save the searched samples as csv file"""
-        Path(save_as).parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(self.samples).to_csv(save_as, index=False, header=["event_id", "dataset_id", "rec_path", "filename"])
+        if len(self.samples) > 0:
+            Path(save_as).parent.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame(self.samples).to_csv(save_as, index=False, header=["event_id", "dataset_id", "rec_path", "filename"])
+            print(f"Saved {len(self.samples)} new entries as {save_as}.")
+        else:
+            print("No new entries found to save.")
 
 
     def download_tables_from_db(self, db_path, csv_dir):
