@@ -1,4 +1,5 @@
 import os
+import re
 import torch
 import pickle
 import sqlite3
@@ -23,17 +24,19 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
         if labels is not None and not isinstance(labels, str):
             raise TypeError("Expected a string or None, got type: {}".format(type(labels).__name__))
         
-        if (labels is not None) and os.path.exists(labels):
+        if (labels is not None):
+            if os.path.exists(labels):
+                if labels.endswith(".csv"):
+                    if verbose:
+                        print("Loading dataset from csv")
+                    self.load_annotations_from_csv()
 
-            if labels.endswith(".csv"):
-                if verbose:
-                    print("Loading dataset from csv")
-                self.load_annotations_from_csv()
-
-            if labels.endswith(".pkl"):
-                if verbose:
-                    print("Loading dataset from pickle")
-                self.load_annotations_from_pickle()
+                if labels.endswith(".pkl"):
+                    if verbose:
+                        print("Loading dataset from pickle")
+                    self.load_annotations_from_pickle()
+            else:
+                raise FileNotFoundError(f"Labels file {labels} does not exist.")
 
         if self.samples is None:
             if verbose:
@@ -300,38 +303,74 @@ class DataSetup:
         if save_as is not None and save_as.lower().endswith(".csv"):
             self.save_as_csv(save_as)
 
+    def search_images_in_folder(self, root, ignore=None):
+        """
+        Recursively search for images in a root folder and its subfolders.
 
-    def search_images_in_folder(self, root):
-        index = 0
-        # Get all images in root and subdirs of root
+        Args:
+            root (str): Root folder path.
+            ignore (list, optional): Folder names to ignore. Defaults to [].
+        """
+        if ignore is None:
+            ignore = set()
+        else:
+            ignore = set(ignore)
+
+        valid_exts = {".png", ".jpg", ".jpeg"}
         self.samples = []
-        for dirpath, _, filenames in os.walk(root):
-            for filename in filenames:
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    img_path = os.path.join(dirpath, filename)
-                    relative_path = os.path.relpath(img_path, root)
-                    folder_name = os.path.basename(os.path.dirname(img_path))
+        self.foldername_to_id.clear()
+        index = 0
 
-                    # Update folder to id mapping
-                    if folder_name not in self.foldername_to_id.keys():
-                        self.foldername_to_id[folder_name] = index
-                        index += 1
+        # Use scandir-based recursion for high performance
+        def _scan_dir(dirpath):
+            nonlocal index
+            try:
+                with os.scandir(dirpath) as it:
+                    for entry in it:
+                        # Skip ignored folders early
+                        if entry.is_dir(follow_symlinks=False):
+                            if entry.name in ignore:
+                                print(f"Skipping {entry.name}")
+                                continue
+                            print(f"Searching {entry.name}")
+                            _scan_dir(entry.path)
+                        elif entry.is_file():
+                            ext = os.path.splitext(entry.name)[1].lower()
+                            if ext in valid_exts:
+                                dataset_id = os.path.basename(os.path.dirname(entry.path))
+                                if dataset_id not in self.foldername_to_id:
+                                    self.foldername_to_id[dataset_id] = index
+                                    index += 1
+                                rec_path = entry.name
+                                event_id = self.event_id_from_rec_path(rec_path)
+                                rel_path = os.path.relpath(entry.path, root)
+                                self.samples.append((event_id, dataset_id, rec_path, rel_path))
 
-                    folder_id = self.foldername_to_id[folder_name]
-                    self.samples.append((relative_path, filename, folder_id))
+            except PermissionError:
+                # Skip folders without access
+                pass
+
+        _scan_dir(root)
+
+
+    def event_id_from_rec_path(self, rec_path):
+        """Extract event_id from the rec_path"""
+        idx = rec_path.find("_ev")
+        event_id = rec_path[:idx + len("_ev")]
+        return event_id
 
 
     def save_as_pickle(self, save_as):
-        # Save the searched samples as pickle file
-        Path(os.path.dirname(os.path.split(save_as)[-1])).mkdir(parents=True, exist_ok=True)
+        """Save the searched samples as pickle file"""
+        Path(save_as).parent.mkdir(parents=True, exist_ok=True)
         with open(save_as, 'wb') as f:
             pickle.dump(self.samples, f)
 
 
     def save_as_csv(self, save_as):
-        # Save the searched samples as csv file
-        Path(os.path.dirname(os.path.split(save_as)[-1])).mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(self.samples).to_csv(save_as, index=False, header=["img_path", "filename", "folder_id"])
+        """Save the searched samples as csv file"""
+        Path(save_as).parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(self.samples).to_csv(save_as, index=False, header=["event_id", "dataset_id", "rec_path", "filename"])
 
 
     def download_tables_from_db(self, db_path, csv_dir):
