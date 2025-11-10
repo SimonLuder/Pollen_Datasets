@@ -88,7 +88,7 @@ def generate_labels(images_root, labels_folder, filename, force_recalc):
             # Recalculate features for all images in the dataframe
             computed_data_full_recalc = recalculate_holographic_features(df, images_root)
             # Save the dataframe
-            computed_data_full_recalc.to_csv(filename, index=False)
+            computed_data_full_recalc.to_csv(os.path.join(labels_folder, f"collection_{timestamp}.csv"), index=False)
 
     # Get updated databasis
     df = get_datasets_as_df(labels_folder)
