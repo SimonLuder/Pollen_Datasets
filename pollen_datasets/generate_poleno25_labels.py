@@ -154,7 +154,7 @@ def generate_labels(images_root, labels_folder, out_file, dataset_ids_file, forc
         
     # Get updated databasis and save as single csv
     df = get_datasets_as_df(labels_folder)
-    os.makedirs(os.path.basename(out_file), exist_ok=True)
+    os.makedirs(os.path.dirname(out_file), exist_ok=True)
     df.to_csv(out_file, index=False)
     logging.info(f"Created final csv for {out_file}")
 
