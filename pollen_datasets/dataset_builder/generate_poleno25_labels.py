@@ -13,7 +13,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir) 
 sys.path.append(parent_dir)
 
-from pollen_datasets.holographic_features import recalculate_holographic_features
+from pollen_datasets.dataset_builder.holographic_features import recalculate_holographic_features
 
 
 def get_datasets_as_df(folder):
@@ -113,6 +113,7 @@ def generate_labels(images_root, labels_folder, out_file, dataset_ids_file, forc
         already_searched = []
 
     logging.info(f"Searching in {images_root}, ignore folders: {already_searched}")
+
     # Search missing images
     setup = DataSetup()
     setup.search_images_in_folder(
@@ -121,11 +122,15 @@ def generate_labels(images_root, labels_folder, out_file, dataset_ids_file, forc
     )
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     setup.save_as_csv(os.path.join(labels_folder, f"collection_{timestamp}.csv"))
+
     logging.info("Done")
 
     # Get all csv files
-    all_csv = [os.path.join(labels_folder, file) for file in os.listdir(labels_folder) if file.endswith(".csv")]
-    logging.info(f"Found csv's: {all_csv}")
+    all_csv = [
+        os.path.join(labels_folder, file) for file in os.listdir(labels_folder) if file.endswith(".csv")
+        ]
+    
+    logging.debug(f"Found csv's: {all_csv}")
 
     # Itterate over all csv files separately
     for csv in all_csv:
@@ -135,9 +140,10 @@ def generate_labels(images_root, labels_folder, out_file, dataset_ids_file, forc
         annotations_complete, _ = has_columns(df, annotations_cols)
 
         if force_recalc or not regionprops_complete:
+
+            logging.debug(f"Recalculate regionprops for {csv}")
             
             # Recalculate features for all images in the dataframe
-            logging.info(f"Recalculate regionprops for {csv}")
             df = recalculate_holographic_features(df, images_root)
 
             # Save the dataframe
@@ -145,8 +151,9 @@ def generate_labels(images_root, labels_folder, out_file, dataset_ids_file, forc
 
         if force_recalc or not annotations_complete:
 
+            logging.debug(f"Adding annotations to {csv}")
+
             # Add image annotation labels
-            logging.info(f"Adding annotations to {csv}")
             df = add_annotations(df, dataset_ids_file)
 
             # Save the dataframe
@@ -156,7 +163,8 @@ def generate_labels(images_root, labels_folder, out_file, dataset_ids_file, forc
     df = get_datasets_as_df(labels_folder)
     os.makedirs(os.path.dirname(out_file), exist_ok=True)
     df.to_csv(out_file, index=False)
-    logging.info(f"Created final csv for {out_file}")
+    
+    logging.info(f"Created poleno25 labels file at {out_file}")
 
 
 if __name__ == "__main__":
