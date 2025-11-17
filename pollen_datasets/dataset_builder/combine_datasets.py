@@ -100,7 +100,7 @@ if __name__ == "__main__":
     parser.add_argument('--root1', default='Z:/marvel/marvel-fhnw/data/Poleno', type=str)
     # New poleno labels
     parser.add_argument('--file2', default='./data/processed/poleno_25/poleno_25_labels.csv', type=str)
-    parser.add_argument('--root2', default='Z:/marvel/marvel-fhnw/data/Poleno_25', type=str)
+    parser.add_argument('--root2', default='Z:/marvel/marvel-fhnw/data/Poleno25', type=str)
     # Output file
     parser.add_argument('--save_as', default='data/final/poleno/poleno_labels_clean.csv', type=str)
 

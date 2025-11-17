@@ -169,7 +169,7 @@ def generate_labels(images_root, labels_folder, out_file, dataset_ids_file, forc
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Arguments for resnet training')
+    parser = argparse.ArgumentParser(description='Arguments to generate poleno 25 labels')
     parser.add_argument('--labels', default="./data/processed/poleno_25/temp/", type=str)
     parser.add_argument('--root', default='Z:/marvel/marvel-fhnw/data/Poleno_25', type=str)
     parser.add_argument('--filename', default='data/processed/poleno_25/poleno_25_labels.csv', type=str)
