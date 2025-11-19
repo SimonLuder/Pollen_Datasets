@@ -13,14 +13,26 @@ pip install git+https://github.com/SimonLuder/Pollen_Datasets.git
 **How to use:**
 
 Single images
-
 ```python
 from pollen_datasets.poleno import HolographyImageFolder
 
 dataset = HolographyImageFolder(
     root="YourImagesRootFolder",
-    labels="YourLabelsFilePath.csv"
+    labels="YourLabelsFilePath.csv",
+    dataset_cfg=dataset_cfg,
     transform=transform, 
-    config=config,
+)
+```
+
+Pairwise images
+```python
+from pollen_datasets.poleno import HolographyImageFolder
+
+dataset = PairwiseHolographyImageFolder(
+    root="YourImagesRootFolder",
+    labels="YourLabelsFilePath.csv",
+    dataset_cfg=dataset_cfg,
+    transform=transform,
+    pair_transform=pair_transform
 )
 ```
