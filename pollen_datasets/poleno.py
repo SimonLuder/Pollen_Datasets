@@ -85,6 +85,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
         self.cond_cfg = config.get("conditioning", {})
         super().__init__(root, transform, labels, config, verbose)
 
+
     def load_annotations_from_csv(self):
         df = pd.read_csv(self.labels)
 
@@ -112,6 +113,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
             # For now, just store raw values; convert to tensors in __getitem__
             self.conditions[name] = df[cols].values.tolist()
 
+
     def __getitem__(self, idx):
         img_path, filename = self.samples[idx]
         img = self._load_image(img_path)
@@ -129,107 +131,110 @@ class HolographyImageFolder(BaseHolographyImageFolder):
                 cond_dict[name] = val
 
         return img, cond_dict, filename
-
+    
 
 class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
-    
-    def __init__(self, root, transform=None, labels=None, config=None, verbose=False):
-        super().__init__(root, transform, labels, config, verbose) 
+
+    def __init__(self, root, transform=None, pair_transform=None, labels=None, config=None, verbose=False):
+        """
+        config must be the SAME full config dict used for the single-image dataset.
+        """
+        self.pair_transform = pair_transform
+        self.full_config = config
+        self.dataset_cfg = config["dataset"]
+        self.cond_cfg = config.get("conditioning", {})
+        super().__init__(root, transform, labels, config, verbose)
 
 
     def load_annotations_from_csv(self):
         df = pd.read_csv(self.labels)
-        
-        if self.config is not None:
-            filename_column = self.config.get("filenames", "filename")
-            image_folder = self.config.get("img_path", "img_path")
-            class_cond_column = self.config.get("classes", None) 
-            feature_columns = self.config.get("features", None)
-            cond_image_column = self.config.get("cond_img_path", None)
-            event_id_column = self.config.get("event_id", "event_id")
-        else:
-            # Default names
-            filename_column = "filename"
-            image_folder = "img_path"
-            class_cond_column = None
-            feature_columns = None
-            cond_image_column = None
-            event_id_column = "event_id"
 
-        self.samples = []
-        self.class_labels = []
-        self.tabular_features = []
-        self.cond_imgs = []
+        # Column names
+        filename_col = self.dataset_cfg.get("filenames", "filename")
+        imgpath_col = self.dataset_cfg.get("img_path", "img_path")
+        particle_id_col = self.dataset_cfg.get("particle_id", "event_id")
 
-        grouped = df.groupby(event_id_column)
+        # Group by particle identifier to get pairs
+        grouped = df.groupby(particle_id_col)
 
+        self.samples = []             # list of ((img1_path, fn1), (img2_path, fn2))
+        self.conditions = {}          # dict[str, list[tuple(val1, val2)]]
+
+        # Determine which conditioning types are active
+        enabled = self.cond_cfg.get("enabled", "")
+        enabled_names = [c for c in enabled.replace(" ", "").split("+") if c]
+
+        # Access encoder configs
+        enc_cfgs = self.cond_cfg.get("encoders", {})
+
+        # Initialize conditioning lists
+        for name in enabled_names:
+            if name not in enc_cfgs:
+                raise KeyError(
+                    f"Condition '{name}' is enabled but not defined under conditioning.encoders."
+                )
+            self.conditions[name] = []
+
+        # Build paired samples
         for event_id, group in grouped:
             if len(group) != 2:
-                raise ValueError(f"Event ID {event_id} does not have exactly two rows.")
-            
-            group = group.reset_index(drop=True)
-            sample1 = (group.loc[0, image_folder], group.loc[0, filename_column])
-            sample2 = (group.loc[1, image_folder], group.loc[1, filename_column])
+                raise ValueError(f"Event ID {event_id} does not have exactly 2 rows")
+
+            group = group.sort_index().reset_index(drop=True)
+
+            # Paired sample
+            sample1 = (group.loc[0, imgpath_col], group.loc[0, filename_col])
+            sample2 = (group.loc[1, imgpath_col], group.loc[1, filename_col])
             self.samples.append((sample1, sample2))
 
-            if class_cond_column is not None:
-                self.class_labels.append((
-                    group.loc[0, class_cond_column],
-                    group.loc[1, class_cond_column]
-                ))
+            # Add conditioning vals for each encoder
+            for name in enabled_names:
+                cfg = enc_cfgs[name]
+                cols = cfg["use_columns"]
+                if isinstance(cols, str):
+                    cols = [cols]
 
-            if feature_columns is not None:
-                self.tabular_features.append((
-                    group.loc[0, feature_columns].tolist(),
-                    group.loc[1, feature_columns].tolist()
-                ))
+                # Extract values for each row
+                val1 = group.loc[0, cols].values.tolist() if len(cols) > 1 else group.loc[0, cols[0]]
+                val2 = group.loc[1, cols].values.tolist() if len(cols) > 1 else group.loc[1, cols[0]]
 
-            if cond_image_column is not None:
-                self.cond_imgs.append((
-                    group.loc[0, cond_image_column],
-                    group.loc[1, cond_image_column]
-                ))
-
-        # If not provided, set to None
-        if class_cond_column is None:
-            self.class_labels = None
-        if feature_columns is None:
-            self.tabular_features = None
-        if cond_image_column is None:
-            self.cond_imgs = None
+                # Store pair (val1, val2)
+                self.conditions[name].append((val1, val2))
 
 
     def __getitem__(self, idx):
-        # Unpack paired samples
-        (img_path1, filename1), (img_path2, filename2) = self.samples[idx]
+        # image pair
+        (path1, name1), (path2, name2) = self.samples[idx]
 
-        img1 = self._load_image(img_path1)
-        img2 = self._load_image(img_path2)
+        img1 = self._load_image(path1)
+        img2 = self._load_image(path2)
 
-        # Conditioning dictionary
-        condition = dict()
+        # single-image transform
+        if self.transform:
+            img1 = self.transform(img1)
+            img2 = self.transform(img2)
 
-        if self.class_labels:
-            condition["class"] = self.class_labels[idx]  # Tuple: (label1, label2)
+        # pair-dependent transform
+        meta = {}
+        if self.pair_transform:
+            img1, img2, meta = self.pair_transform(img1, img2)
 
-        if self.tabular_features:
-            tab1, tab2 = self.tabular_features[idx]
-            condition["tabular"] = (
-                torch.tensor(tab1, dtype=torch.float32),
-                torch.tensor(tab2, dtype=torch.float32)
-            )
+        # Build conditioning dict
+        cond_dict = {}
+        if hasattr(self, "conditions"):
+            for name, pair_list in self.conditions.items():
+                val1, val2 = pair_list[idx]
 
-        if self.cond_imgs:
-            cond1, cond2 = self.cond_imgs[idx]
-            # Assuming conditioning images need to be loaded similarly to input images
-            cond_img1 = Image.open(os.path.join(self.root, cond1))
-            cond_img2 = Image.open(os.path.join(self.root, cond2))
-            if self.transform:
-                cond_img1 = self.transform(cond_img1)
-                cond_img2 = self.transform(cond_img2)
-            condition["image"] = (cond_img1, cond_img2)
+                if meta.get("swapped", False): # swap condition
+                    val1, val2 = val2, val1
 
-        return (img1, img2), condition, (filename1, filename2)
+                cond_dict[name] = (val1, val2)
+
+        if meta.get("swapped", False):
+            name1, name2 = name2, name1
+
+        # return consistent structure
+        return (img1, img2), cond_dict, (name1, name2)
     
 
 class DataSetup:
