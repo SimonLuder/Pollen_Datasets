@@ -11,14 +11,10 @@ from typing import Optional, Any
 
 class BaseHolographyImageFolder(torch.utils.data.Dataset):
     
-    def __init__(self, root, transform=None, labels: Optional[str]=None, config=None, verbose: bool=False):
+    def __init__(self, root, transform=None, labels: Optional[str]=None, verbose: bool=False):
         self.root = root
         self.transform = transform
-        self.config = config
         self.labels = labels
-        self.cond_imgs = None
-        self.tabular_features = None
-        self.class_labels = None
         self.samples = None
 
         if labels is not None and not isinstance(labels, str):
@@ -72,18 +68,10 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
 
 class HolographyImageFolder(BaseHolographyImageFolder):
 
-    def __init__(self, root, transform=None, labels=None, config=None, verbose=False):
-        """
-        Here, `config` is the full config dict or at least:
-          {
-            "dataset": ...,
-            "conditioning": ...
-          }
-        """
-        self.full_config = config
-        self.dataset_cfg = config["dataset"]
-        self.cond_cfg = config.get("conditioning", {})
-        super().__init__(root, transform, labels, config, verbose)
+    def __init__(self, root, transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
+        self.dataset_cfg = dataset_cfg
+        self.cond_cfg = cond_cfg
+        super().__init__(root, transform, labels, verbose)
 
 
     def load_annotations_from_csv(self):
@@ -135,15 +123,11 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
 class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
-    def __init__(self, root, transform=None, pair_transform=None, labels=None, config=None, verbose=False):
-        """
-        config must be the SAME full config dict used for the single-image dataset.
-        """
+    def __init__(self, root, transform=None, pair_transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
         self.pair_transform = pair_transform
-        self.full_config = config
-        self.dataset_cfg = config["dataset"]
-        self.cond_cfg = config.get("conditioning", {})
-        super().__init__(root, transform, labels, config, verbose)
+        self.dataset_cfg = dataset_cfg
+        self.cond_cfg = cond_cfg
+        super().__init__(root, transform, labels, verbose)
 
 
     def load_annotations_from_csv(self):
