@@ -199,8 +199,10 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
         if self.pair_transform:
             img1, img2, meta = self.pair_transform(img1, img2)
 
-        # Build conditioning dict
-        cond_dict = {}
+        # Build conditioning dicts
+        cond_dict1 = {}
+        cond_dict2 = {}
+
         if hasattr(self, "conditions"):
             for name, pair_list in self.conditions.items():
                 val1, val2 = pair_list[idx]
@@ -208,11 +210,13 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
                 if meta.get("swapped", False): # swap condition
                     val1, val2 = val2, val1
 
-                cond_dict[name] = (val1, val2)
+                cond_dict1[name] = val1
+                cond_dict2[name] = val2
 
+        # If images are swapped also swapp filenames
         if meta.get("swapped", False):
             name1, name2 = name2, name1
 
         # return consistent structure
-        return (img1, img2), cond_dict, (name1, name2)
+        return (img1, img2), (cond_dict1, cond_dict2), (name1, name2)
     
