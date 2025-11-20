@@ -109,10 +109,46 @@ class HolographyImageFolder(BaseHolographyImageFolder):
         if hasattr(self, "conditions"):
             for name, data_list in self.conditions.items():
                 val = data_list[idx]
-                # if it's a single column, collapse list -> scalar
+
+                 # flatten if single-column
                 if isinstance(val, (list, np.ndarray)) and len(val) == 1:
                     val = val[0]
-                cond_dict[name] = val
+
+                cfg = self.cond_cfg["encoders"][name]
+                enc_type = cfg.get("type", "numeric")   # default
+
+                if enc_type == "categorical":
+                    # ensure int (category index)
+                    val = int(val)
+                    cond_dict[name] = val
+
+                else:   # numeric (vector)
+                    val = torch.as_tensor(val, dtype=torch.float32).flatten()
+                    cond_dict[name] = val
+
+        return img, cond_dict, filename
+    
+    def __getitem__(self, idx):
+        img_path, filename = self.samples[idx]
+        img = self._load_image(img_path)
+
+        if self.transform:
+            img = self.transform(img)
+
+        cond_dict = {}
+        for name, data_list in self.conditions.items():
+            val = data_list[idx]
+
+            # collapse single item list
+            if isinstance(val, (list, np.ndarray)) and len(val) == 1:
+                val = val[0]
+
+            # detect categorical automatically:
+            # if dtype is int → categorical
+            if isinstance(val, (np.integer, int)):
+                cond_dict[name] = torch.tensor(val, dtype=torch.int64)   # category index
+            else:
+                cond_dict[name] = torch.as_tensor(val, dtype=torch.float32).flatten()
 
         return img, cond_dict, filename
     
@@ -181,6 +217,25 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
                 # Store pair (val1, val2)
                 self.conditions[name].append((val1, val2))
 
+    def _convert_condition_val(self, val):
+        """
+        Universal conversion:
+          - ints → int64 tensor (categorical)
+          - everything else → float32 tensor (numeric)
+        """
+
+        # collapse lists like [3] → 3
+        if isinstance(val, (list, np.ndarray)) and len(val) == 1:
+            val = val[0]
+
+        # categorical
+        if isinstance(val, (np.integer, int)):
+            return torch.tensor(val, dtype=torch.int64)
+
+        # numeric vector
+        return torch.as_tensor(val, dtype=torch.float32).flatten()
+
+
 
     def __getitem__(self, idx):
         # image pair
@@ -200,8 +255,7 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
             img1, img2, meta = self.pair_transform(img1, img2)
 
         # Build conditioning dicts
-        cond_dict1 = {}
-        cond_dict2 = {}
+        cond_dict1, cond_dict2 = {}, {}
 
         if hasattr(self, "conditions"):
             for name, pair_list in self.conditions.items():
@@ -210,8 +264,8 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
                 if meta.get("swapped", False): # swap condition
                     val1, val2 = val2, val1
 
-                cond_dict1[name] = val1
-                cond_dict2[name] = val2
+                cond_dict1[name] = self._convert_condition_val(val1)
+                cond_dict2[name] = self._convert_condition_val(val2)
 
         # If images are swapped also swapp filenames
         if meta.get("swapped", False):
@@ -219,4 +273,3 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
         # return consistent structure
         return (img1, img2), (cond_dict1, cond_dict2), (name1, name2)
-    
