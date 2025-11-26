@@ -5,6 +5,9 @@ import pandas as pd
 from PIL import Image
 from typing import Optional, Any
 
+from .registry import get_condition_fn
+
+
 class BaseHolographyImageFolder(torch.utils.data.Dataset):
     
     def __init__(self, root, transform=None, labels: Optional[str]=None, verbose: bool=False):
@@ -54,12 +57,36 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
         
         if img.mode == 'I;16' or img.mode == 'I':
             # Convert to NumPy and scale from [0, 65535] to [0, 1]
-            img = np.array(img).astype(np.float32) / 65535.0
+            img = np.array(img).astype(np.float32)
+            img /= 65535.0
         elif img.mode == 'L':
             # 8-bit grayscale, scale from [0, 255] to [0, 1]
-            img = np.array(img).astype(np.float32) / 255.0
+            img = np.array(img).astype(np.float32)
+            img /= 255.0
+        elif img.mode == 'RGB':
+            # RGB uint8
+            img = np.array(img, dtype=np.uint8).astype(np.float32)
+            img /= 255.0
+        else:
+            raise ValueError(f"Unsupported image mode: {img.mode}")
 
         return img
+    
+
+    def _convert_condition_val(self, val):
+        """
+        Universal conversion:
+          - ints → int64 tensor (categorical)
+          - everything else → float32 tensor (numeric)
+        """
+        # collapse lists like [3] → 3
+        if isinstance(val, (list, np.ndarray)) and len(val) == 1:
+            val = val[0]
+        # categorical
+        if isinstance(val, (np.integer, int)):
+            return torch.tensor(val, dtype=torch.int64)
+        # numeric vector
+        return torch.as_tensor(val, dtype=torch.float32).flatten()
 
 
 class HolographyImageFolder(BaseHolographyImageFolder):
@@ -91,6 +118,13 @@ class HolographyImageFolder(BaseHolographyImageFolder):
                 raise KeyError(f"Condition '{name}' enabled but not defined in conditioning.encoders")
             cfg = enc_cfgs[name]
             cols = cfg["use_columns"]
+
+            # Add detault value if no columns specified
+            if cols is None:
+                default_val = cfg.get("default", [])
+                self.conditions[name] = [default_val] * len(df)
+                continue
+
             if isinstance(cols, str):
                 cols = [cols]
 
@@ -128,6 +162,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
         return img, cond_dict, filename
     
+
     def __getitem__(self, idx):
         img_path, filename = self.samples[idx]
         img = self._load_image(img_path)
@@ -137,18 +172,12 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
         cond_dict = {}
         for name, data_list in self.conditions.items():
-            val = data_list[idx]
+            raw = data_list[idx]
 
-            # collapse single item list
-            if isinstance(val, (list, np.ndarray)) and len(val) == 1:
-                val = val[0]
+            # process raw values
+            val = self._convert_condition_val(raw)
 
-            # detect categorical automatically:
-            # if dtype is int → categorical
-            if isinstance(val, (np.integer, int)):
-                cond_dict[name] = torch.tensor(val, dtype=torch.int64)   # category index
-            else:
-                cond_dict[name] = torch.as_tensor(val, dtype=torch.float32).flatten()
+            cond_dict[name] = val
 
         return img, cond_dict, filename
     
@@ -207,6 +236,13 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
             for name in enabled_names:
                 cfg = enc_cfgs[name]
                 cols = cfg["use_columns"]
+
+                # Add detault value if no columns specified
+                if cols is None:
+                    default_val = cfg.get("default", [])
+                    self.conditions[name].append((default_val, default_val))
+                    continue
+
                 if isinstance(cols, str):
                     cols = [cols]
 
@@ -216,25 +252,6 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
                 # Store pair (val1, val2)
                 self.conditions[name].append((val1, val2))
-
-    def _convert_condition_val(self, val):
-        """
-        Universal conversion:
-          - ints → int64 tensor (categorical)
-          - everything else → float32 tensor (numeric)
-        """
-
-        # collapse lists like [3] → 3
-        if isinstance(val, (list, np.ndarray)) and len(val) == 1:
-            val = val[0]
-
-        # categorical
-        if isinstance(val, (np.integer, int)):
-            return torch.tensor(val, dtype=torch.int64)
-
-        # numeric vector
-        return torch.as_tensor(val, dtype=torch.float32).flatten()
-
 
 
     def __getitem__(self, idx):
@@ -256,16 +273,28 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
         # Build conditioning dicts
         cond_dict1, cond_dict2 = {}, {}
+        cond_dict1["meta"] = meta
+        cond_dict2["meta"] = meta
 
         if hasattr(self, "conditions"):
             for name, pair_list in self.conditions.items():
-                val1, val2 = pair_list[idx]
+                raw1, raw2 = pair_list[idx]
 
                 if meta.get("swapped", False): # swap condition
-                    val1, val2 = val2, val1
+                    raw1, raw2 = raw2, raw1
 
-                cond_dict1[name] = self._convert_condition_val(val1)
-                cond_dict2[name] = self._convert_condition_val(val2)
+                # process raw values
+                val1 = self._convert_condition_val(raw1)
+                val2 = self._convert_condition_val(raw2)
+
+                # apply conditioning transform function (if exists)
+                func_name = self.cond_cfg["encoders"][name].get("condition_fn", None)
+                if func_name is not None:
+                    fn = get_condition_fn(func_name)
+                    val1, val2 = fn(val1, val2, meta)
+
+                cond_dict1[name] = val1
+                cond_dict2[name] = val2
 
         # If images are swapped also swapp filenames
         if meta.get("swapped", False):
