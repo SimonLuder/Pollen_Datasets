@@ -10,7 +10,7 @@ from .registry import get_condition_fn
 
 class BaseHolographyImageFolder(torch.utils.data.Dataset):
     
-    def __init__(self, root, transform=None, labels: Optional[str]=None, verbose: bool=False):
+    def __init__(self, root=None, transform=None, labels: Optional[str]=None, verbose: bool=False):
         self.root = root
         self.transform = transform
         self.labels = labels
@@ -18,6 +18,9 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
 
         if labels is not None and not isinstance(labels, str):
             raise TypeError("Expected a string or None, got type: {}".format(type(labels).__name__))
+        
+        if verbose and root is not None:
+            print(f"Set image path root: {root}")
         
         if (labels is not None):
             if os.path.exists(labels):
@@ -53,7 +56,10 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
     
 
     def _load_image(self, img_path):
-        img = Image.open(os.path.join(self.root, img_path))
+
+        full_path = img_path if self.root is None else os.path.join(self.root, img_path)
+ 
+        img = Image.open(full_path)
         
         if img.mode == 'I;16' or img.mode == 'I':
             # Convert to NumPy and scale from [0, 65535] to [0, 1]
@@ -91,7 +97,7 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
 
 class HolographyImageFolder(BaseHolographyImageFolder):
 
-    def __init__(self, root, transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
+    def __init__(self, root=None, transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
         self.dataset_cfg = dataset_cfg
         self.cond_cfg = cond_cfg
         super().__init__(root, transform, labels, verbose)
@@ -184,7 +190,7 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
 class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
-    def __init__(self, root, transform=None, pair_transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
+    def __init__(self, root=None, transform=None, pair_transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
         self.pair_transform = pair_transform
         self.dataset_cfg = dataset_cfg
         self.cond_cfg = cond_cfg
