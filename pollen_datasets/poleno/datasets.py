@@ -10,9 +10,8 @@ from .registry import get_condition_fn
 
 class BaseHolographyImageFolder(torch.utils.data.Dataset):
     
-    def __init__(self, root=None, transform=None, labels: Optional[str]=None, verbose: bool=False):
+    def __init__(self, root: Optional[str]=None, labels: Optional[str]=None, verbose: bool=False):
         self.root = root
-        self.transform = transform
         self.labels = labels
         self.samples = None
 
@@ -100,7 +99,8 @@ class HolographyImageFolder(BaseHolographyImageFolder):
     def __init__(self, root=None, transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
         self.dataset_cfg = dataset_cfg
         self.cond_cfg = cond_cfg
-        super().__init__(root, transform, labels, verbose)
+        self.transform = transform
+        super().__init__(root, labels, verbose)
 
 
     def load_annotations_from_csv(self):
@@ -136,37 +136,6 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
             # For now, just store raw values; convert to tensors in __getitem__
             self.conditions[name] = df[cols].values.tolist()
-
-
-    def __getitem__(self, idx):
-        img_path, filename = self.samples[idx]
-        img = self._load_image(img_path)
-
-        if self.transform:
-            img = self.transform(img)
-
-        cond_dict: dict[str, Any] = {}
-        if hasattr(self, "conditions"):
-            for name, data_list in self.conditions.items():
-                val = data_list[idx]
-
-                 # flatten if single-column
-                if isinstance(val, (list, np.ndarray)) and len(val) == 1:
-                    val = val[0]
-
-                cfg = self.cond_cfg["encoders"][name]
-                enc_type = cfg.get("type", "numeric")   # default
-
-                if enc_type == "categorical":
-                    # ensure int (category index)
-                    val = int(val)
-                    cond_dict[name] = val
-
-                else:   # numeric (vector)
-                    val = torch.as_tensor(val, dtype=torch.float32).flatten()
-                    cond_dict[name] = val
-
-        return img, cond_dict, filename
     
 
     def __getitem__(self, idx):
@@ -190,11 +159,13 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
 class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
-    def __init__(self, root=None, transform=None, pair_transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
+    def __init__(self, root=None, transform=None, transform1=None, transform2=None, pair_transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
         self.pair_transform = pair_transform
         self.dataset_cfg = dataset_cfg
         self.cond_cfg = cond_cfg
-        super().__init__(root, transform, labels, verbose)
+        self.transform1 = transform1 if transform1 else transform
+        self.transform2 = transform2 if transform2 else transform
+        super().__init__(root, labels, verbose)
 
 
     def load_annotations_from_csv(self):
@@ -268,9 +239,10 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
         img2 = self._load_image(path2)
 
         # single-image transform
-        if self.transform:
-            img1 = self.transform(img1)
-            img2 = self.transform(img2)
+        if self.transform1:
+            img1 = self.transform1(img1)
+        if self.transform2:
+            img2 = self.transform2(img2)
 
         # pair-dependent transform
         meta = {}
