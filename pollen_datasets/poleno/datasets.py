@@ -54,26 +54,46 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
         return len(self.samples)
     
 
+    # def _load_image(self, img_path):
+
+    #     full_path = img_path if self.root is None else os.path.join(self.root, img_path)
+ 
+    #     img = Image.open(full_path)
+        
+    #     if img.mode == 'I;16' or img.mode == 'I':
+    #         # Convert to NumPy and scale from [0, 65535] to [0, 1]
+    #         img = np.array(img).astype(np.float32)
+    #         img /= 65535.0
+    #     elif img.mode == 'L':
+    #         # 8-bit grayscale, scale from [0, 255] to [0, 1]
+    #         img = np.array(img).astype(np.float32)
+    #         img /= 255.0
+    #     elif img.mode == 'RGB':
+    #         # RGB uint8
+    #         img = np.array(img, dtype=np.uint8).astype(np.float32)
+    #         img /= 255.0
+    #     else:
+    #         raise ValueError(f"Unsupported image mode: {img.mode}")
+
+    #     return img
+    
     def _load_image(self, img_path):
 
         full_path = img_path if self.root is None else os.path.join(self.root, img_path)
- 
-        img = Image.open(full_path)
-        
-        if img.mode == 'I;16' or img.mode == 'I':
-            # Convert to NumPy and scale from [0, 65535] to [0, 1]
+
+        with Image.open(full_path) as img:
+            mode = img.mode
             img = np.array(img).astype(np.float32)
+
+
+        if mode == 'I;16' or mode == 'I':
             img /= 65535.0
-        elif img.mode == 'L':
-            # 8-bit grayscale, scale from [0, 255] to [0, 1]
-            img = np.array(img).astype(np.float32)
+        elif mode == 'L':
             img /= 255.0
-        elif img.mode == 'RGB':
-            # RGB uint8
-            img = np.array(img, dtype=np.uint8).astype(np.float32)
+        elif mode == 'RGB':
             img /= 255.0
         else:
-            raise ValueError(f"Unsupported image mode: {img.mode}")
+            raise ValueError(f"Unsupported image mode: {mode}")
 
         return img
     
