@@ -6,7 +6,7 @@ import logging
 import argparse
 import pandas as pd
 from datetime import datetime
-from pollen_datasets.poleno import DataSetup
+from pollen_datasets.dataset_builder.data_collector import DataSetup
 
 # add parent dir to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
