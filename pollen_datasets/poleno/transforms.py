@@ -20,7 +20,9 @@ class SwapRotate180:
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, img1, img2, meta={}):
+    def __call__(self, img1, img2, meta=None):
+        if meta is None:
+            meta = {}
         swapped = False
         if random.random() < self.p:
             img1, img2 = img2, img1
@@ -38,7 +40,9 @@ class RotatePairKx90:
     def __init__(self, p=1.0):
         self.p = p
 
-    def __call__(self, img1, img2, meta={}):
+    def __call__(self, img1, img2, meta=None):
+        if meta is None:
+            meta = {}
         k = 0
         if random.random() < self.p:
             k = random.randint(0, 3)  # 0,1,2,3 → 0°, 90°, 180°, 270°
@@ -47,3 +51,4 @@ class RotatePairKx90:
             img2 = TF.rotate(img2, deg)
             meta.update({"rotation_deg": deg})
         return img1, img2, meta
+    

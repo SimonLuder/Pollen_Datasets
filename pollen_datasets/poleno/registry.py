@@ -28,7 +28,6 @@ def relative_viewpoint_rotation(val0, val1, meta, r=0.5):
 
     rot_deg = meta.get("rotation_deg", 0) % 360
     rot_rad = np.deg2rad(rot_deg)
-    print(rot_deg, rot_rad)
 
     # Initial relative direction: left → vector (-1, 0)
     v = np.array([-1.0, 0.0], dtype=np.float32)

@@ -53,29 +53,6 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.samples)
     
-
-    # def _load_image(self, img_path):
-
-    #     full_path = img_path if self.root is None else os.path.join(self.root, img_path)
- 
-    #     img = Image.open(full_path)
-        
-    #     if img.mode == 'I;16' or img.mode == 'I':
-    #         # Convert to NumPy and scale from [0, 65535] to [0, 1]
-    #         img = np.array(img).astype(np.float32)
-    #         img /= 65535.0
-    #     elif img.mode == 'L':
-    #         # 8-bit grayscale, scale from [0, 255] to [0, 1]
-    #         img = np.array(img).astype(np.float32)
-    #         img /= 255.0
-    #     elif img.mode == 'RGB':
-    #         # RGB uint8
-    #         img = np.array(img, dtype=np.uint8).astype(np.float32)
-    #         img /= 255.0
-    #     else:
-    #         raise ValueError(f"Unsupported image mode: {img.mode}")
-
-    #     return img
     
     def _load_image(self, img_path):
 
@@ -84,7 +61,6 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
         with Image.open(full_path) as img:
             mode = img.mode
             img = np.array(img).astype(np.float32)
-
 
         if mode == 'I;16' or mode == 'I':
             img /= 65535.0
@@ -110,6 +86,9 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
         # categorical
         if isinstance(val, (np.integer, int)):
             return torch.tensor(val, dtype=torch.int64)
+        # images (numpy or torch)
+        if isinstance(val, (np.ndarray, torch.Tensor)) and val.ndim in (2, 3):
+            return val
         # numeric vector
         return torch.as_tensor(val, dtype=torch.float32).flatten()
 
@@ -195,6 +174,7 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
         filename_col = self.dataset_cfg.get("filenames", "filename")
         imgpath_col = self.dataset_cfg.get("img_path", "img_path")
         particle_id_col = self.dataset_cfg.get("particle_id", "event_id")
+        image_nr_col = self.dataset_cfg.get("image_nr", "image_nr")
 
         # Group by particle identifier to get pairs
         grouped = df.groupby(particle_id_col)
@@ -222,7 +202,7 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
             if len(group) != 2:
                 raise ValueError(f"Event ID {event_id} does not have exactly 2 rows")
 
-            group = group.sort_index().reset_index(drop=True)
+            group = group.sort_values(image_nr_col).reset_index(drop=True)
 
             # Paired sample
             sample1 = (group.loc[0, imgpath_col], group.loc[0, filename_col])
