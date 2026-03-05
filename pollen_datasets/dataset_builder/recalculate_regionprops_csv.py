@@ -23,7 +23,7 @@ def recalc_regionprops(input_csv, images_root, output_csv, intermediate_path=Non
     logging.info("Recalculating holographic region properties...")
     
     # Compute features on a copy
-    df_features = recalculate_holographic_features(df.copy(), images_root, intermediate_path)
+    df_features = recalculate_holographic_features(df.copy(), images_root, intermediate_path, resize_to=(200, 200))
 
     logging.info("Updating region property columns...")
 

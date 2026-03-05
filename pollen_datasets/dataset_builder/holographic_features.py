@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 
 
-def recalculate_holographic_features(df, image_path, intermediate_path="dataset_id"):
+def recalculate_holographic_features(df, image_path, intermediate_path="dataset_id", resize_to=None):
     """
     Recalculates holographic features for each row in the DataFrame based on the corresponding image.
 
@@ -13,6 +13,8 @@ def recalculate_holographic_features(df, image_path, intermediate_path="dataset_
     - df (pandas.DataFrame): Input DataFrame containing relevant data.
     - image_path (str): Path to the directory containing images.
     - intermediate_path (str, optional): Intermediate path from the csv. "str" or None.
+    - resize_to : tuple(int, int) or None
+        Resize particle image to (width, height) before feature extraction.
 
     Returns:
     - pandas.DataFrame: Updated DataFrame with recalculated features.
@@ -29,6 +31,9 @@ def recalculate_holographic_features(df, image_path, intermediate_path="dataset_
             img_path = os.path.join(image_path, row[intermediate_path], row["rec_path"])
 
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+
+        if resize_to is not None:
+            img = cv2.resize(img, resize_to, interpolation=cv2.INTER_NEAREST)
 
         if img is not None:
             rp = regionprops_from_numpy(img)
