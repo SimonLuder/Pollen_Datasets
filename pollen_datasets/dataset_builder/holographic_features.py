@@ -5,13 +5,14 @@ import numpy as np
 from tqdm import tqdm
 
 
-def recalculate_holographic_features(df, image_path):
+def recalculate_holographic_features(df, image_path, intermediate_path="dataset_id"):
     """
     Recalculates holographic features for each row in the DataFrame based on the corresponding image.
 
     Parameters:
     - df (pandas.DataFrame): Input DataFrame containing relevant data.
     - image_path (str): Path to the directory containing images.
+    - intermediate_path (str, optional): Intermediate path from the csv. "str" or None.
 
     Returns:
     - pandas.DataFrame: Updated DataFrame with recalculated features.
@@ -21,7 +22,11 @@ def recalculate_holographic_features(df, image_path):
 
     for i, row in tqdm(df.iterrows(), total=len(df)):
 
-        img_path = os.path.join(image_path, row["dataset_id"], row["rec_path"])
+        # Load image
+        if intermediate_path is None:
+            img_path = os.path.join(image_path, row["rec_path"])
+        else:
+            img_path = os.path.join(image_path, row[intermediate_path], row["rec_path"])
 
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
 
