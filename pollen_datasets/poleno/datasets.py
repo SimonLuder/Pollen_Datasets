@@ -280,3 +280,118 @@ class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
         # return consistent structure
         return (img1, img2), (cond_dict1, cond_dict2), (name1, name2)
+    
+
+class StackedPairwiseHolographyImageFolder(PairwiseHolographyImageFolder):
+    """
+    Returns paired images as a single stacked image.
+
+    Output:
+        stacked_img: torch.Tensor or np.ndarray
+            - grayscale/channel-first after transform: (2, H, W)
+            - if transform returns multi-channel tensors: (2*C, H, W)
+        cond_dict: dict
+            conditioning for the stacked sample
+        filenames: tuple[str, str]
+            filenames in the same order as the stacked channels
+    """
+
+    def __init__(
+        self,
+        root=None,
+        transform=None,
+        transform1=None,
+        transform2=None,
+        pair_transform=None,
+        labels=None,
+        dataset_cfg={},
+        cond_cfg={},
+        verbose=False,
+        merge_conditions=False,
+    ):
+        """
+        merge_conditions:
+            If False, returns (cond_dict1, cond_dict2)
+            If True, tries to stack matching conditioning values.
+        """
+        self.merge_conditions = merge_conditions
+        super().__init__(
+            root=root,
+            transform=transform,
+            transform1=transform1,
+            transform2=transform2,
+            pair_transform=pair_transform,
+            labels=labels,
+            dataset_cfg=dataset_cfg,
+            cond_cfg=cond_cfg,
+            verbose=verbose,
+        )
+
+    def _stack_images(self, img1, img2):
+        # torch tensors
+        if isinstance(img1, torch.Tensor) and isinstance(img2, torch.Tensor):
+            # If grayscale images are HxW, make them 1xHxW first
+            if img1.ndim == 2:
+                img1 = img1.unsqueeze(0)
+            if img2.ndim == 2:
+                img2 = img2.unsqueeze(0)
+
+            if img1.ndim != 3 or img2.ndim != 3:
+                raise ValueError(
+                    f"Expected transformed tensors with 2 or 3 dims, got {img1.ndim} and {img2.ndim}"
+                )
+
+            return torch.cat([img1, img2], dim=0)
+
+        # numpy arrays
+        if isinstance(img1, np.ndarray) and isinstance(img2, np.ndarray):
+            if img1.ndim == 2:
+                img1 = np.expand_dims(img1, axis=0)
+            if img2.ndim == 2:
+                img2 = np.expand_dims(img2, axis=0)
+
+            if img1.ndim != 3 or img2.ndim != 3:
+                raise ValueError(
+                    f"Expected numpy arrays with 2 or 3 dims, got {img1.ndim} and {img2.ndim}"
+                )
+
+            return np.concatenate([img1, img2], axis=0)
+
+        raise TypeError(f"Unsupported image types: {type(img1)} and {type(img2)}")
+
+    def _merge_conds(self, cond_dict1, cond_dict2):
+        if self.merge_conditions:
+            meta = cond_dict1.get("meta", {})
+            out = {"meta": meta}
+
+            for key in cond_dict1:
+                if key == "meta":
+                    continue
+
+                v1 = cond_dict1[key]
+                v2 = cond_dict2[key]
+
+                # stack tensors if compatible
+                if isinstance(v1, torch.Tensor) and isinstance(v2, torch.Tensor):
+                    if v1.ndim == 0:
+                        out[key] = torch.stack([v1, v2], dim=0)
+                    else:
+                        out[key] = torch.stack([v1, v2], dim=0)
+                elif isinstance(v1, np.ndarray) and isinstance(v2, np.ndarray):
+                    out[key] = np.stack([v1, v2], axis=0)
+                else:
+                    out[key] = (v1, v2)
+
+            return out
+        else:
+            return cond_dict1, cond_dict2
+
+    def __getitem__(self, idx):
+        # reuse parent logic
+        (img1, img2), (cond_dict1, cond_dict2), (name1, name2) = super().__getitem__(idx)
+
+        stacked_img = self._stack_images(img1, img2)
+        cond_dict = self._merge_conds(cond_dict1, cond_dict2)
+        
+
+        return stacked_img, cond_dict, (name1, name2)

@@ -18,10 +18,12 @@ from pollen_datasets.poleno import HolographyImageFolder
 
 dataset = HolographyImageFolder(
     root="YourImagesRootFolder",
-    labels="YourLabelsFilePath.csv",
+    labels="YourLabelsFile.csv",
     dataset_cfg=dataset_cfg,
     transform=transform, 
-)
+) 
+# Returns: 
+#   (image, condition, filename)
 ```
 
 Pairwise images
@@ -30,9 +32,29 @@ from pollen_datasets.poleno import HolographyImageFolder
 
 dataset = PairwiseHolographyImageFolder(
     root="YourImagesRootFolder",
-    labels="YourLabelsFilePath.csv",
+    labels="YourLabelsFile.csv",
     dataset_cfg=dataset_cfg,
     transform=transform,
     pair_transform=pair_transform
-)
+) 
+# Returns: 
+#   ((image1, image2), (condition1, condition2), (filename1, filename2))
+```
+
+Stacked pairs of images
+```python
+from pollen_datasets.poleno import HolographyImageFolder
+
+dataset = StackedPairwiseHolographyImageFolder(
+    root="YourImagesRootFolder",
+    labels="YourLabelsFile.csv",
+    dataset_cfg=dataset_cfg,
+    transform=transform,
+    pair_transform=pair_transform
+    merge_conditions=False,
+) 
+# Returns:
+#   (stacked_images, (condition1, condition2), (filename1, filename2))  if merge_conditions=False
+#   (stacked_images, stacked_condition, (filename1, filename2))         if merge_conditions=True
+
 ```
