@@ -1,3 +1,3 @@
-from .datasets import HolographyImageFolder, PairwiseHolographyImageFolder
+from .datasets import HolographyImageFolder, PairwiseHolographyImageFolder, StackedPairwiseHolographyImageFolder
 
-__all__ = ["HolographyImageFolder", "PairwiseHolographyImageFolder"]
+__all__ = ["HolographyImageFolder", "PairwiseHolographyImageFolder", "StackedPairwiseHolographyImageFolder"]
