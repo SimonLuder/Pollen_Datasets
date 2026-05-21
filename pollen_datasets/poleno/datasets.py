@@ -10,7 +10,7 @@ from .registry import get_condition_fn
 
 class BaseHolographyImageFolder(torch.utils.data.Dataset):
     
-    def __init__(self, root: Optional[str]=None, labels: Optional[str]=None, verbose: bool=False):
+    def __init__(self, root: Optional[str]=None, labels: Optional[str]=None, verbose: bool=False, **kwargs,):
         self.root = root
         self.labels = labels
         self.samples = None
@@ -95,7 +95,7 @@ class BaseHolographyImageFolder(torch.utils.data.Dataset):
 
 class HolographyImageFolder(BaseHolographyImageFolder):
 
-    def __init__(self, root=None, transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
+    def __init__(self, root=None, transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False, **kwargs,):
         self.dataset_cfg = dataset_cfg
         self.cond_cfg = cond_cfg
         self.transform = transform
@@ -158,7 +158,19 @@ class HolographyImageFolder(BaseHolographyImageFolder):
 
 class PairwiseHolographyImageFolder(BaseHolographyImageFolder):
 
-    def __init__(self, root=None, transform=None, transform1=None, transform2=None, pair_transform=None, labels=None, dataset_cfg={}, cond_cfg={}, verbose=False):
+    def __init__(
+            self, 
+            root=None, 
+            transform=None, 
+            transform1=None, 
+            transform2=None, 
+            pair_transform=None, 
+            labels=None, 
+            dataset_cfg={}, 
+            cond_cfg={}, 
+            verbose=False,
+            **kwargs,
+        ):
         self.pair_transform = pair_transform
         self.dataset_cfg = dataset_cfg
         self.cond_cfg = cond_cfg
@@ -290,8 +302,8 @@ class StackedPairwiseHolographyImageFolder(PairwiseHolographyImageFolder):
         stacked_img: torch.Tensor or np.ndarray
             - grayscale/channel-first after transform: (2, H, W)
             - if transform returns multi-channel tensors: (2*C, H, W)
-        cond_dict: dict
-            conditioning for the stacked sample
+        cond_dict: dict (default) or Any (if custom merge_conditions function) 
+            Conditioning for the stacked sample
         filenames: tuple[str, str]
             filenames in the same order as the stacked channels
     """
@@ -308,11 +320,15 @@ class StackedPairwiseHolographyImageFolder(PairwiseHolographyImageFolder):
         cond_cfg={},
         verbose=False,
         merge_conditions=False,
+        **kwargs,
     ):
         """
         merge_conditions:
-            If False, returns (cond_dict1, cond_dict2)
-            If True, tries to stack matching conditioning values.
+            False: Returns (cond_dict1, cond_dict2)
+            True: Stacks matching values where possible.
+            callable: Custom function with signature:
+                    merge_conditions(cond_dict1, cond_dict2) -> Any
+
         """
         self.merge_conditions = merge_conditions
         super().__init__(
@@ -360,6 +376,11 @@ class StackedPairwiseHolographyImageFolder(PairwiseHolographyImageFolder):
         raise TypeError(f"Unsupported image types: {type(img1)} and {type(img2)}")
 
     def _merge_conds(self, cond_dict1, cond_dict2):
+        # Custom merge function
+        if callable(self.merge_conditions):
+            return self.merge_conditions(cond_dict1, cond_dict2)
+
+        # Default merged behavior
         if self.merge_conditions:
             meta = cond_dict1.get("meta", {})
             out = {"meta": meta}
@@ -371,20 +392,19 @@ class StackedPairwiseHolographyImageFolder(PairwiseHolographyImageFolder):
                 v1 = cond_dict1[key]
                 v2 = cond_dict2[key]
 
-                # stack tensors if compatible
                 if isinstance(v1, torch.Tensor) and isinstance(v2, torch.Tensor):
-                    if v1.ndim == 0:
-                        out[key] = torch.stack([v1, v2], dim=0)
-                    else:
-                        out[key] = torch.stack([v1, v2], dim=0)
+                    out[key] = torch.stack([v1, v2], dim=0)
+
                 elif isinstance(v1, np.ndarray) and isinstance(v2, np.ndarray):
                     out[key] = np.stack([v1, v2], axis=0)
+
                 else:
                     out[key] = (v1, v2)
 
             return out
-        else:
-            return cond_dict1, cond_dict2
+
+        # No merge
+        return cond_dict1, cond_dict2
 
     def __getitem__(self, idx):
         # reuse parent logic
