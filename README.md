@@ -28,7 +28,7 @@ dataset = HolographyImageFolder(
 
 Pairwise images
 ```python
-from pollen_datasets.poleno import HolographyImageFolder
+from pollen_datasets.poleno import PairwiseHolographyImageFolder
 
 dataset = PairwiseHolographyImageFolder(
     root="YourImagesRootFolder",
@@ -43,7 +43,7 @@ dataset = PairwiseHolographyImageFolder(
 
 Stacked pairs of images
 ```python
-from pollen_datasets.poleno import HolographyImageFolder
+from pollen_datasets.poleno import StackedPairwiseHolographyImageFolder
 
 dataset = StackedPairwiseHolographyImageFolder(
     root="YourImagesRootFolder",
