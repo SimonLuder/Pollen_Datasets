@@ -24,6 +24,24 @@ def count_csv_events(path):
     return counts, missing
 
 
+def drop_invalid_event_counts(rows, *, report_path):
+    """Remove whole events with a row count other than two; report removals."""
+    counts, missing = count_event_ids(rows["event_id"])
+    invalid = {event: count for event, count in counts.items() if count != 2}
+    issues = [{"event_id": event, "row_count": count, "issue": "row_count_not_two"}
+              for event, count in sorted(invalid.items())]
+    if missing:
+        issues.append({"event_id": "", "row_count": missing, "issue": "missing_event_id"})
+    report_path = Path(report_path)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(issues, columns=["event_id", "row_count", "issue"]).to_csv(report_path, index=False)
+    valid_ids = [event for event, count in counts.items() if count == 2]
+    retained = rows.loc[rows["event_id"].isin(valid_ids)].copy()
+    summary = {"dropped_events": len(invalid), "dropped_rows": len(rows) - len(retained),
+               "missing_event_id_rows": missing, "report": report_path.name}
+    return retained, summary
+
+
 def require_event_pairs(counts, *, context, report_path, missing_rows=0):
     issues = [{"event_id": event, "row_count": int(count), "issue": "row_count_not_two"}
               for event, count in counts.items() if count != 2]

@@ -8,7 +8,7 @@ import pandas as pd
 
 from .event_splitting import split_by_species_events, sample_species_events
 
-from .event_validation import validate_frame_events, require_distinct_images
+from .event_validation import validate_frame_events, require_distinct_images, drop_invalid_event_counts
 from .species_exclusions import exclusion_names, filter_species_frame
 
 
@@ -98,6 +98,10 @@ def create(images, labels, out, *, workbook=None):
     manifest_path.write_text(json.dumps(records), encoding="utf-8")
     actual = pd.DataFrame(records)
     actual = filter_species_frame(actual, excluded)
+    actual, dropped = drop_invalid_event_counts(
+        actual, report_path=out / "left_out_poleno_dropped_events.csv")
+    print(f"Dropped {dropped['dropped_events']:,} invalid events "
+          f"({dropped['dropped_rows']:,} image rows).", flush=True)
     keys = ["dataset_id", "rec_path"]
     if actual.duplicated(keys).any():
         raise ValueError("Duplicate image keys in physical inventory")
@@ -142,6 +146,7 @@ def create(images, labels, out, *, workbook=None):
     assert saved[["dataset_id_enum", "species_norm_enum", "genus_enum", "event_id_enum"]].notna().all().all()
     (out / "left_out_poleno_combined_label_mappings.json").write_text(json.dumps(enums, indent=2), encoding="utf-8")
     summary = {"rows": len(result), "species": result.species.nunique(), "columns": len(schema),
+               "invalid_event_removal": dropped,
                "excluded_species": sorted(excluded),
                "column_names": schema,
                "counts": result.groupby("species").size().to_dict(),

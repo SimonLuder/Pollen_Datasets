@@ -95,8 +95,10 @@ refused; choose a new output path for each run, including after a failed run.
 - Creation selects Cupressus sp., Cynosurus cristatus, Poaceae sp., Populus sp.,
   Quercus sp., Trisetum sp., and Ulmus sp. The list is in `_internal/create_left_out_poleno.py`.
 - Rows reference images; every event must have exactly two rows across all labels
-  within each output CSV, referencing two distinct nonblank image paths. Invalid
-  or missing IDs and duplicate image references stop preparation and produce reports.
+  within each output CSV, referencing two distinct nonblank image paths. During
+  image inventory creation, whole events with counts other than two (or missing IDs)
+  are dropped and recorded in `left_out_poleno_dropped_events.csv`. Duplicate
+  image references and invalid merged datasets still stop preparation with reports.
   References are checked; merge does not open image files to verify their contents.
 - Events stay together, with seed 42. Test receives `max(80, ceil(10%))` events per
   species, validation `max(20, ceil(5%))`, and training the remainder. At least one
@@ -154,3 +156,9 @@ Implementation helpers live in `_internal/`; use the public commands above.
 
 Public commands and generated filenames remain unchanged. Monthly export now also
 rejects inconsistent known flags across rows for the same species, matching training.
+
+Invalid image-inventory events are removed before splitting: all rows for each
+event with a count other than two are discarded, including repeated events across
+species folders. Removal counts are recorded in the creation summary. Original
+images and input CSVs remain unchanged. A species must still have enough retained
+events for the configured split sizes.
