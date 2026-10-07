@@ -17,5 +17,8 @@ dependencies = [
     "torch",
 ]
 
+[project.optional-dependencies]
+builder = ["openpyxl>=3.1,<4"]
+
 [project.urls]
 Homepage = "https://github.com/SimonLuder/Pollen_Datasets"
